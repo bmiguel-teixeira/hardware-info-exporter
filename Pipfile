@@ -1,0 +1,8 @@
+[[source]]
+url = "https://pypi.python.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+pythonnet = "==2.5.1"
+prometheus_client  = "==0.8.0"
