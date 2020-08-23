@@ -6,3 +6,4 @@ name = "pypi"
 [packages]
 pythonnet = "==2.5.1"
 prometheus_client  = "==0.8.0"
+pywin32 = "228"

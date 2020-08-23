@@ -3,6 +3,13 @@ import time
 import os
 import logging
 import sys
+import socket
+
+import win32serviceutil
+
+import servicemanager
+import win32event
+import win32service
 
 from prometheus_client import start_http_server, Gauge
 
@@ -12,6 +19,7 @@ log.addHandler(logging.StreamHandler(sys.stdout))
 
 PORT=8000
 SCRAPE_INTERVAL=1
+DLL_PATH='C:\\Program Files\\HardwareInfoExporter\\OpenHardwareMonitorLib.dll'
 
 class HostMetricsWrapper(object):
     def __init__(self):
@@ -27,7 +35,7 @@ class HostMetricsWrapper(object):
         }
 
     def init_open_hw_monitor(self):
-        clr.AddReference(f'{os.getcwd()}\\OpenHardwareMonitorLib.dll')
+        clr.AddReference(DLL_PATH)
 
         from OpenHardwareMonitor import Hardware
 
@@ -202,13 +210,79 @@ class HardwareMetricsExporter(object):
                     self._disk_load.labels(name).set(value)
 
 
-if __name__ == '__main__':
-    host_metrics = HostMetricsWrapper()
-    host_metrics.init_open_hw_monitor()
+class HardwareInfoExporter(win32serviceutil.ServiceFramework):
+    '''Base class to create winservice in Python'''
 
-    exporter = HardwareMetricsExporter(PORT)
-    while(True):
-        metrics = host_metrics.get_all_metrics()
-        exporter.update(metrics)
-        log.info('Metrics collected.')
-        time.sleep(SCRAPE_INTERVAL)
+    _svc_name_ = 'HardwareInfoExporter'
+    _svc_display_name_ = 'HardwareInfoExporter'
+    _svc_description_ = 'HardwareInfoExporter'
+
+    @classmethod
+    def parse_command_line(cls):
+        '''
+        ClassMethod to parse the command line
+        '''
+        win32serviceutil.HandleCommandLine(cls)
+
+    def __init__(self, args):
+        '''
+        Constructor of the winservice
+        '''
+        self._running = True
+        win32serviceutil.ServiceFramework.__init__(self, args)
+        self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
+        socket.setdefaulttimeout(60)
+
+    def SvcStop(self):
+        '''
+        Called when the service is asked to stop
+        '''
+        self.stop()
+        self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
+        win32event.SetEvent(self.hWaitStop)
+
+    def SvcDoRun(self):
+        '''
+        Called when the service is asked to start
+        '''
+        self.start()
+        servicemanager.LogMsg(servicemanager.EVENTLOG_INFORMATION_TYPE,
+                              servicemanager.PYS_SERVICE_STARTED,
+                              (self._svc_name_, ''))
+        self.main()
+
+    def start(self):
+        '''
+        Override to add logic before the start
+        eg. running condition
+        '''
+        self._running = True
+
+    def stop(self):
+        '''
+        Override to add logic before the stop
+        eg. invalidating running condition
+        '''
+        self._running = False
+
+    def main(self):
+        host_metrics = HostMetricsWrapper()
+        host_metrics.init_open_hw_monitor()
+
+        exporter = HardwareMetricsExporter(PORT)
+        while(True):
+            metrics = host_metrics.get_all_metrics()
+            exporter.update(metrics)
+            log.info('Metrics collected.')
+            time.sleep(SCRAPE_INTERVAL)
+            if not self._running:
+                break
+
+
+if __name__ == '__main__':
+    if len(sys.argv) == 1:
+        servicemanager.Initialize()
+        servicemanager.PrepareToHostSingle(HardwareInfoExporter)
+        servicemanager.StartServiceCtrlDispatcher()
+    else:
+        win32serviceutil.HandleCommandLine(HardwareInfoExporter)
