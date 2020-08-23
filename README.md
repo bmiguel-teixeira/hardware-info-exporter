@@ -1,5 +1,5 @@
 # hardware-info-exporter
-Prometheus Windows Hardware Info Exporter
+Prometheus Windows Hardware Info Exporter for cpu (temperatures, load, frequency, power, frequencies), gpu (temperatures, load, frequency, frequencies), memory and disks.
 
 This requires `OpenHardwareMonitorLib.dll` to interface with Windows.
 It can be downloaded from here: https://openhardwaremonitor.org/
